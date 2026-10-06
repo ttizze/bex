@@ -688,9 +688,11 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       },
       runtimeMode: currentRuntimeMode,
       onUpdateRuntimeMode: props.onUpdateRuntimeMode,
+      providerSwitchLocked: !props.canSwitchProvider,
     }),
     [
       currentModelSelection,
+      props.canSwitchProvider,
       props.reportedModelSelection,
       currentRuntimeMode,
       props.onUpdateModelSelection,

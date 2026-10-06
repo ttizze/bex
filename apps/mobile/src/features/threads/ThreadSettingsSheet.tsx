@@ -79,6 +79,13 @@ import {
 } from "../layout/native-mail-search-toolbar";
 import { ModelRow, ChoiceRow } from "./ThreadSettingsRows";
 import {
+  ThreadSettingsAccountHeader,
+  ThreadSettingsAccountList,
+  type ThreadSettingsAccounts,
+  useThreadSettingsAccounts,
+} from "./ThreadSettingsAccount";
+import { isCommittableAccountSwitch } from "./thread-settings-account-state";
+import {
   compatibleRuntimeModeForChoices,
   runtimeModeChoicesForSupportedModes,
   selectableChoices,
@@ -251,6 +258,8 @@ type ThreadSettingsSessionProps = {
   readonly onUpdateOptionSelections: (selections: ReadonlyArray<ProviderOptionSelection>) => void;
   readonly runtimeMode: RuntimeMode;
   readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
+  /** A started thread that cannot hand off keeps its driver and continuation group. */
+  readonly providerSwitchLocked?: boolean;
 };
 
 export type ExistingThreadSettingsRouteSession = ThreadSettingsSessionProps & {
@@ -322,6 +331,8 @@ type ThreadSettingsSessionValue = {
   readonly setSearchQuery: (query: string) => void;
   readonly setShowLegacy: (showLegacy: boolean) => void;
   readonly toggleProvider: (providerKey: string) => void;
+  readonly accounts: ThreadSettingsAccounts;
+  readonly switchAccount: (instanceId: ProviderInstanceId) => void;
 };
 
 const ThreadSettingsSessionContext = createContext<ThreadSettingsSessionValue | null>(null);
@@ -365,6 +376,12 @@ function ThreadSettingsSessionProvider(
     () => new Set(),
   );
   const [pendingModel, setPendingModel] = useState<ModelOption | null>(null);
+  const accounts = useThreadSettingsAccounts({
+    environmentId: props.environmentId,
+    displayedSelection: pendingModel?.selection ?? props.selectedModel,
+    appliedInstanceId: props.selectedModel?.instanceId,
+    locked: props.providerSwitchLocked === true,
+  });
 
   const isApplied = useCallback(
     (option: ModelOption) =>
@@ -414,7 +431,13 @@ function ThreadSettingsSessionProvider(
   );
   const commitPendingModel = useCallback(() => {
     if (pendingModel) {
-      if (!canCommitPendingModel(pendingModel, props.providerGroups)) {
+      // An account switch can stage an instance the locked catalog does not list.
+      const switchesAccount = isCommittableAccountSwitch({
+        pending: pendingModel,
+        appliedInstanceId: props.selectedModel?.instanceId,
+        accounts: accounts.options,
+      });
+      if (!switchesAccount && !canCommitPendingModel(pendingModel, props.providerGroups)) {
         Alert.alert(
           "Model unavailable",
           "Set up this provider on web or desktop, or select another model.",
@@ -425,7 +448,13 @@ function ThreadSettingsSessionProvider(
       props.onSelectModel(pendingModel);
     }
     return true;
-  }, [pendingModel, props.onSelectModel, props.providerGroups]);
+  }, [
+    accounts.options,
+    pendingModel,
+    props.onSelectModel,
+    props.providerGroups,
+    props.selectedModel?.instanceId,
+  ]);
 
   const applyOptionChange = useCallback(
     (id: string, value: string | boolean) => {
@@ -469,6 +498,13 @@ function ThreadSettingsSessionProvider(
     },
     [isApplied],
   );
+  const switchAccount = useCallback(
+    (instanceId: ProviderInstanceId) => {
+      const option = accounts.optionFor(instanceId);
+      if (option) pressModel(option);
+    },
+    [accounts, pressModel],
+  );
 
   const value = useMemo<ThreadSettingsSessionValue>(
     () => ({
@@ -499,8 +535,12 @@ function ThreadSettingsSessionProvider(
       setShowLegacy: setShowLegacyToggle,
       toggleProvider,
       toggleFavorite,
+      accounts,
+      switchAccount,
     }),
     [
+      accounts,
+      switchAccount,
       applyOptionChange,
       commitPendingModel,
       compatibleRuntimeMode,
@@ -810,6 +850,7 @@ function ThreadSettingsOptionsItem(props: {
 /** One native scroll owner for the model catalog and its related settings. */
 function ThreadSettingsMainContent(props: {
   readonly onOpenSubmenu: (submenu: ThreadSettingsSubmenuPage) => void;
+  readonly onOpenAccounts: () => void;
 }) {
   const session = useThreadSettingsSession();
   const refreshProvidersCommand = useAtomCommand(serverEnvironment.refreshProviders, {
@@ -919,6 +960,14 @@ function ThreadSettingsMainContent(props: {
       maintainVisibleContentPosition={THREAD_SETTINGS_MAINTAIN_VISIBLE_CONTENT_POSITION}
       ListHeaderComponent={
         <>
+          {session.accounts.options[0] ? (
+            <View className="pt-2">
+              <ThreadSettingsAccountHeader
+                account={session.accounts.options[0]}
+                onPress={props.onOpenAccounts}
+              />
+            </View>
+          ) : null}
           {Platform.OS === "android" ? (
             <View className="px-4 pb-2 pt-3">
               <View
@@ -1063,6 +1112,7 @@ function ThreadSettingsChoiceContent(props: {
 type ThreadSettingsPickerStackParams = {
   ThreadSettingsModels: undefined;
   ThreadSettingsChoice: ThreadSettingsSubmenuPage & { readonly title: string };
+  ThreadSettingsAccounts: undefined;
 };
 
 type ThreadSettingsPickerPresentation = {
@@ -1228,6 +1278,7 @@ function ThreadSettingsModelsScreen() {
       />
       <MaterialScreenContent>
         <ThreadSettingsMainContent
+          onOpenAccounts={() => navigation.navigate("ThreadSettingsAccounts")}
           onOpenSubmenu={(submenu) => {
             const title =
               submenu.kind === "runtime"
@@ -1328,6 +1379,30 @@ function ThreadSettingsChoiceScreen() {
   );
 }
 
+/** The driver's accounts; picking one stages its model and returns to the catalog. */
+function ThreadSettingsAccountsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<ThreadSettingsPickerStackParams>>();
+  const session = useThreadSettingsSession();
+
+  return (
+    <>
+      <NativeStackScreenOptions options={{ headerShown: Platform.OS !== "android" }} />
+      {Platform.OS === "android" ? (
+        <AndroidScreenHeader title="Accounts" onBack={() => navigation.goBack()} hideBottomBorder />
+      ) : null}
+      <MaterialScreenContent>
+        <ThreadSettingsAccountList
+          options={session.accounts.options}
+          onSelect={(instanceId) => {
+            session.switchAccount(instanceId);
+            navigation.goBack();
+          }}
+        />
+      </MaterialScreenContent>
+    </>
+  );
+}
+
 function ThreadSettingsPickerNavigator(props: ThreadSettingsPickerPresentation) {
   const theme = useUniwindTheme();
   const solidSheetBackground = theme["--color-sheet-solid"];
@@ -1371,6 +1446,11 @@ function ThreadSettingsPickerNavigator(props: ThreadSettingsPickerPresentation) 
           name="ThreadSettingsChoice"
           component={ThreadSettingsChoiceScreen}
           options={({ route }) => ({ title: route.params.title })}
+        />
+        <ThreadSettingsPickerStack.Screen
+          name="ThreadSettingsAccounts"
+          component={ThreadSettingsAccountsScreen}
+          options={{ title: "Accounts" }}
         />
       </ThreadSettingsPickerStack.Navigator>
     </ThreadSettingsPickerPresentationContext.Provider>
