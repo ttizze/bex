@@ -16,7 +16,7 @@ import { constants } from "node:os";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-const executableName = process.platform === "win32" ? "t3.exe" : "t3";
+const executableName = process.platform === "win32" ? "bex.exe" : "bex";
 const executable = join(dirname(require.resolve("@t3code/t3-" + process.platform + "-" + process.arch + "/package.json")), executableName);
 const ipc = process.send !== undefined;
 const child = spawn(executable, process.argv.slice(2), {

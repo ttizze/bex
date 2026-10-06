@@ -11,8 +11,6 @@ import {
   HostProcessPlatform,
 } from "@t3tools/shared/hostProcess";
 
-import packageJson from "../../package.json" with { type: "json" };
-
 export type CliRunner = "npx" | "pnpm dlx" | "bunx";
 
 /**
@@ -63,7 +61,7 @@ export const resolveServerInstallation = Effect.gen(function* () {
   const platform = yield* HostProcessPlatform;
   const entry = yield* fs.realPath(executable ? executablePath : (args[1] ?? ""));
   const match =
-    /^(.*)\/lib\/node_modules\/t3\/(?:dist\/bin\.mjs|bin\/t3\.js|node_modules\/@t3code\/t3-[^/]+\/t3)$/.exec(
+    /^(.*)\/lib\/node_modules\/t3\/(?:dist\/bin\.mjs|bin\/t3\.js|node_modules\/@t3code\/t3-[^/]+\/bex)$/.exec(
       entry,
     );
   if (!match) {
@@ -108,40 +106,7 @@ export const resolveServerInstallation = Effect.gen(function* () {
 }).pipe(Effect.orElseSucceed(() => null));
 
 /**
- * The `t3` package spec to suggest. The literal spec the user typed (e.g.
- * `t3@nightly`) is resolved away before our process starts, so re-derive it
- * from the running version: nightly builds re-suggest the nightly channel,
- * anything else suggests the bare package.
+ * A `bex <subcommand>` suggestion to copy and paste. bex is only installed as
+ * the `bex` command; it is not published for package runners such as npx.
  */
-function suggestedPackageSpec(version: string): string {
-  const channel = /^[^-+]+-(nightly|preview)\./.exec(version)?.[1];
-  return channel === undefined ? "t3" : `t3@${channel}`;
-}
-
-/**
- * Render a `t3 <subcommand>` suggestion that matches how this process was
- * launched, so copy/pasting it actually works: `npx t3 connect` suggests
- * `npx t3 serve`, a global install suggests `t3 serve`, and a nightly build
- * keeps the `@nightly` tag.
- */
-export function formatCliCommand(input: {
-  readonly subcommand: string;
-  readonly entryPath: string;
-  readonly version: string;
-}): string {
-  const runner = detectCliRunner(input.entryPath);
-  if (runner === null) {
-    return `t3 ${input.subcommand}`;
-  }
-  return `${runner} ${suggestedPackageSpec(input.version)} ${input.subcommand}`;
-}
-
-/** `formatCliCommand` against this process's real entry path and version. */
-export const resolveCliCommand = (subcommand: string) =>
-  Effect.map(HostProcessArguments, (processArguments) =>
-    formatCliCommand({
-      subcommand,
-      entryPath: processArguments[1] ?? "",
-      version: packageJson.version,
-    }),
-  );
+export const resolveCliCommand = (subcommand: string) => Effect.succeed(`bex ${subcommand}`);

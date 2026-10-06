@@ -1,7 +1,7 @@
 import { act, type ReactElement } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { EnvironmentId, ServerInstallation } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -76,46 +76,23 @@ describe("ServerUpdateAction", () => {
     testState.continueThreadsAfterServerUpdate = false;
   });
 
-  it.each([
-    [
-      { kind: "npm-global", prefix: "/opt/node" },
-      "npm install --global --prefix '/opt/node' t3@0.0.45",
-      "Update command copied",
-      "then restart t3",
-    ],
-    [
-      { kind: "npx" },
-      "npx t3@0.0.45",
-      "Relaunch command copied",
-      "This does not update an installed t3 command.",
-    ],
-    [
-      undefined,
-      "npx t3@0.0.45",
-      "Relaunch command copied",
-      "This does not update an installed t3 command.",
-    ],
-  ] satisfies ReadonlyArray<readonly [ServerInstallation | undefined, string, string, string]>)(
-    "copies an honest manual command for %j without invoking remote update",
-    (installation, command, title, guidance) => {
-      const action = ServerUpdateAction({
-        environmentId: "env-test" as EnvironmentId,
-        serverLabel: "Test server",
-        selfUpdate: null,
-        installation,
-        targetVersion: "0.0.45",
-      }) as ActionElement;
-      action.props.onClick?.();
-      expect(testState.clipboard).toHaveBeenCalledWith(command);
-      expect(testState.toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title,
-          description: expect.stringContaining(guidance),
-        }),
-      );
-      expect(testState.updateServer).not.toHaveBeenCalled();
-    },
-  );
+  it("copies the bex update command without invoking remote update", () => {
+    const action = ServerUpdateAction({
+      environmentId: "env-test" as EnvironmentId,
+      serverLabel: "Test server",
+      selfUpdate: null,
+      targetVersion: "0.0.45",
+    }) as ActionElement;
+    action.props.onClick?.();
+    expect(testState.clipboard).toHaveBeenCalledWith("bex update 0.0.45");
+    expect(testState.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Update command copied",
+        description: expect.stringContaining("then restart bex"),
+      }),
+    );
+    expect(testState.updateServer).not.toHaveBeenCalled();
+  });
 
   it("reports success only after the shared update flow reconnects", async () => {
     testState.updateServer.mockResolvedValue(
@@ -132,7 +109,7 @@ describe("ServerUpdateAction", () => {
     expect(testState.toast).toHaveBeenCalledWith({
       type: "success",
       title: "Test server updated",
-      description: "Reconnected on t3@0.0.31.",
+      description: "Reconnected on bex@0.0.31.",
     });
   });
 

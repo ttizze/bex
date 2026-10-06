@@ -43,7 +43,7 @@ const BOOT_SERVICE_UNIT_FILE = `${BOOT_SERVICE_NAME}.service`;
 const BOOT_SERVICE_LAUNCHD_LABEL = "com.ttizze.bex.service";
 const BOOT_SERVICE_PLIST_FILE = `${BOOT_SERVICE_LAUNCHD_LABEL}.plist`;
 const BOOT_SERVICE_UNIT_ENV = "T3_BOOT_SERVICE_UNIT";
-/** File in the logs dir that receives the service's stdout and stderr. `t3 triage` points agents at it. */
+/** File in the logs dir that receives the service's stdout and stderr. `bex triage` points agents at it. */
 export const BOOT_SERVICE_LOG_FILE = "boot-service.log";
 
 /** systemd expands `%` specifiers, including in unquoted append-log paths. */
@@ -461,11 +461,11 @@ export function formatBootServiceProblem(problem: BootServiceProblem): string {
     case "linger-disabled":
       return 'Lingering is disabled. bex will stop when your last login session ends and will not start at boot. Run `sudo loginctl enable-linger "$(id -un)"` on this machine, then retry the service command as your normal user.';
     case "service-disabled":
-      return "The service is not enabled to start automatically. Run `t3 service install` to repair it.";
+      return "The service is not enabled to start automatically. Run `bex service install` to repair it.";
     case "service-stopped":
-      return "The service is not running. Check the service log and `systemctl --user status bex.service`, then run `t3 service install`.";
+      return "The service is not running. Check the service log and `systemctl --user status bex.service`, then run `bex service install`.";
     case "restart-pending":
-      return "A newer version is installed but the service is still running the previous one. Run `t3 service restart` to switch.";
+      return "A newer version is installed but the service is still running the previous one. Run `bex service restart` to switch.";
   }
 }
 
@@ -495,7 +495,7 @@ export class BootServiceDowngradeRefusedError extends Schema.TaggedError<BootSer
   },
 ) {
   override get message(): string {
-    return `Refusing to replace t3@${this.installedVersion} with older t3@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
+    return `Refusing to replace bex@${this.installedVersion} with older bex@${this.targetVersion}. Run the command again with --allow-downgrade to continue.`;
   }
 }
 
@@ -782,7 +782,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
             Effect.mapError(
               (cause) =>
                 new PinnedRuntimeInstallError({
-                  step: "verifying the pinned t3 runtime",
+                  step: "verifying the pinned bex runtime",
                   cause,
                 }),
             ),
@@ -792,7 +792,7 @@ export const make = Effect.fn("cloud.boot_service.make")(function* (input: {
                 ? Effect.void
                 : Effect.fail(
                     new PinnedRuntimeInstallError({
-                      step: "verifying the pinned t3 runtime",
+                      step: "verifying the pinned bex runtime",
                       exitCode: Number(result.code),
                       stdoutLength: result.stdout.length,
                       stderrLength: result.stderr.length,
