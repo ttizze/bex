@@ -202,5 +202,13 @@ export function scheduledTaskDefaultModel(
       .map((model) => ({ instanceId: entry.instanceId, model })),
   );
   const fallback = models.find(({ model }) => model.isDefault) ?? models[0];
-  return fallback ? { instanceId: fallback.instanceId, model: fallback.model.slug } : null;
+  const preferred =
+    fallback &&
+    models.find(
+      ({ instanceId, model }) =>
+        instanceId === fallback.instanceId &&
+        model.slug === settings.providerDefaultModels[instanceId],
+    );
+  const selected = preferred ?? fallback;
+  return selected ? { instanceId: selected.instanceId, model: selected.model.slug } : null;
 }

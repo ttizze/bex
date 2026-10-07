@@ -144,12 +144,19 @@ function applyInstanceModelPreferences(
     readonly hiddenModels: ReadonlyArray<string>;
     readonly modelOrder: ReadonlyArray<string>;
   },
+  configuredDefaultModel: string | undefined,
 ): AppModelOption[] {
   const hiddenModels = new Set(preferences.hiddenModels);
-  return sortModelsForProviderInstance(
+  const preferredOptions = sortModelsForProviderInstance(
     options.filter((option) => option.isCustom || !hiddenModels.has(option.slug)),
     { modelOrder: preferences.modelOrder },
   );
+  const defaultModel = preferredOptions.find(
+    (option) => option.slug === configuredDefaultModel,
+  )?.slug;
+  return defaultModel
+    ? preferredOptions.map((option) => ({ ...option, isDefault: option.slug === defaultModel }))
+    : preferredOptions;
 }
 
 function normalizeCustomModelEntries(
@@ -215,7 +222,11 @@ function getAppModelOptions(
 
   const preferences = readInstanceModelPreferences(settings, defaultInstanceId);
   return appendUnavailableDynamicModelSelection(
-    applyInstanceModelPreferences(options, preferences),
+    applyInstanceModelPreferences(
+      options,
+      preferences,
+      settings.providerDefaultModels[defaultInstanceId],
+    ),
     rawModels,
     provider,
     selectedModel,
@@ -263,7 +274,11 @@ export function getAppModelOptionsForInstance(
 
   const preferences = readInstanceModelPreferences(settings, entry.instanceId);
   return appendUnavailableDynamicModelSelection(
-    applyInstanceModelPreferences(options, preferences),
+    applyInstanceModelPreferences(
+      options,
+      preferences,
+      settings.providerDefaultModels[entry.instanceId],
+    ),
     entry.models,
     entry.driverKind,
     selectedModel,
@@ -281,6 +296,7 @@ export function resolveAppModelSelection(
   const options = getAppModelOptions(settings, providers, resolvedProvider, selectedModel);
   return (
     resolveSelectableModel(resolvedProvider, selectedModel, options) ??
+    options.find((option) => option.isDefault)?.slug ??
     getDefaultServerModel(providers, resolvedProvider)
   );
 }

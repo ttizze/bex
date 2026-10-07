@@ -144,10 +144,18 @@ export function resolveNewTaskModelSelection(input: {
   readonly projectDefaultSelection: ModelSelection | null;
   readonly stickySelection: ModelSelection | null;
   readonly modelOptions: ReadonlyArray<ModelOption>;
+  readonly providerDefaultModel?: string;
 }): ModelSelection | null {
+  const providerDefaultSelection = input.modelOptions.find(
+    (option) =>
+      option.selection.instanceId === input.stickySelection?.instanceId &&
+      option.selection.model === input.providerDefaultModel &&
+      !option.isUnavailable,
+  )?.selection;
   return (
     input.draftSelection ??
     input.projectDefaultSelection ??
+    providerDefaultSelection ??
     input.stickySelection ??
     input.modelOptions.find((option) => option.isDefault && !option.isUnavailable)?.selection ??
     input.modelOptions.find((option) => !option.isUnavailable)?.selection ??
@@ -174,6 +182,9 @@ export function buildModelOptions(
     }
 
     const providerLabel = providerDisplayLabel(provider);
+    const configuredDefaultModel = provider.models.find(
+      (model) => model.slug === config?.settings?.providerDefaultModels?.[provider.instanceId],
+    )?.slug;
     for (const model of provider.models) {
       const key = `${provider.instanceId}:${model.slug}`;
       options.set(key, {
@@ -187,7 +198,9 @@ export function buildModelOptions(
           ? {}
           : { supportedRuntimeModes: provider.supportedRuntimeModes }),
         ...(provider.iconUrl ? { providerIconUrl: provider.iconUrl } : {}),
-        isDefault: model.isDefault === true,
+        isDefault: configuredDefaultModel
+          ? model.slug === configuredDefaultModel
+          : model.isDefault === true,
         isLegacy: model.isLegacy === true,
         capabilities: model.capabilities,
         selection: normalizeSelectionOptions(

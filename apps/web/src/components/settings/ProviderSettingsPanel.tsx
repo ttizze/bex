@@ -1151,6 +1151,10 @@ export function EnvironmentProviderSettings({
         hiddenModels={modelPreferences.hiddenModels}
         favoriteModels={favoriteModels}
         modelOrder={modelPreferences.modelOrder}
+        defaultModel={settings.providerDefaultModels[row.instanceId] ?? null}
+        onDefaultModelChange={(model) =>
+          updateSettings({ providerDefaultModels: { [row.instanceId]: model } })
+        }
         onHiddenModelsChange={(hiddenModels) =>
           updateProviderModelPreferences(row.instanceId, {
             ...modelPreferences,

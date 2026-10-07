@@ -323,6 +323,22 @@ describe("scheduled task model defaults", () => {
       resolve({ ...config, settings: { ...config.settings, defaultModelSelection: null } }, null),
     ).toEqual({ instanceId, model: "catalog-default" });
   });
+  it("uses the provider's configured default when no project model is set", () => {
+    expect(
+      resolve(
+        {
+          ...config,
+          settings: {
+            ...config.settings,
+            defaultModelSelection: null,
+            providerDefaultModels: { [instanceId]: "environment-model" },
+          },
+        },
+        null,
+      ),
+    ).toEqual({ instanceId, model: "environment-model" });
+  });
+
   it("falls back to the environment default when the project provider is unavailable", () => {
     expect(
       resolve(config, {

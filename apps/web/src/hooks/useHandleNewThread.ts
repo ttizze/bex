@@ -23,6 +23,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { applyProviderDefaultModel } from "@t3tools/shared/model";
 import { readProjects, readThreadShell, useProjects, useThreadShell } from "../state/entities";
 import {
   hasExplicitComposerModelSelection,
@@ -80,6 +81,7 @@ export function useNewThreadHandler() {
       const projects = readProjects();
       const targetServerSettings =
         environmentServerConfigs.get(projectRef.environmentId)?.settings ?? DEFAULT_SERVER_SETTINGS;
+      const providerDefaults = targetServerSettings.providerDefaultModels;
       const {
         getComposerDraft,
         getDraftSessionByLogicalProjectKey,
@@ -140,7 +142,10 @@ export function useNewThreadHandler() {
       const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
         resolveNewThreadModelSelectionOverride({
           projectDefaultSelection: projectDefaultModelSelection ?? null,
-          carrySelection: carryModelSelection,
+          carrySelection: applyProviderDefaultModel(
+            carryModelSelection,
+            carryModelSelection ? providerDefaults[carryModelSelection.instanceId] : undefined,
+          ),
           carrySourceDraftId:
             currentRouteTarget?.kind === "draft" ? currentRouteTarget.draftId : null,
           destinationDraftId,
@@ -276,7 +281,7 @@ export function useNewThreadHandler() {
           const storedDraft = getComposerDraft(emptyStoredDraftThread.draftId);
           const storedDraftHasExplicitModelPick = hasExplicitComposerModelSelection(storedDraft);
           if (!storedDraftHasExplicitModelPick) {
-            applyStickyState(emptyStoredDraftThread.draftId);
+            applyStickyState(emptyStoredDraftThread.draftId, providerDefaults);
             const modelSelectionOverride = resolveModelSelectionOverride(
               emptyStoredDraftThread.draftId,
             );
@@ -415,7 +420,7 @@ export function useNewThreadHandler() {
           runtimeMode: defaultRuntimeMode,
           ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
         });
-        applyStickyState(draftId);
+        applyStickyState(draftId, providerDefaults);
         const modelSelectionOverride = resolveModelSelectionOverride(draftId);
         if (modelSelectionOverride) {
           // Project defaults and carried selections both outrank global sticky

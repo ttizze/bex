@@ -38,6 +38,16 @@ Settings that are environment-wide stay read-only while a project is selected. W
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Default models
+
+Open **Settings → Providers**, select a provider, and choose its **Default model** under
+**Models**. Each provider instance keeps its own choice on that environment, shared by web,
+desktop, and mobile. On mobile, choose the model in **Settings → Providers**.
+Choose **Automatic** to return to automatic model selection.
+
+New threads use that provider's configured model before the last-used model. A project's
+explicit default model still takes priority, and existing threads keep their chosen model.
+
 ## Worktree branch names
 
 In **Settings → Source Control → Worktree branch naming**, choose a static prefix,

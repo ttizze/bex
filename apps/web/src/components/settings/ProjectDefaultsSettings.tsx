@@ -4,7 +4,7 @@ import {
   type ProviderInstanceId,
   type WorktreeSubmodules,
 } from "@t3tools/contracts";
-import { createModelSelection } from "@t3tools/shared/model";
+import { applyProviderDefaultModel, createModelSelection } from "@t3tools/shared/model";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -61,7 +61,17 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
     ? environments.find((environment) => environment.environmentId === target.environmentId)
     : undefined;
   const providers = representative?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
-  const selection = resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
+  const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
+  const initialSelection = resolveDefaultProviderModelSelection(
+    providers,
+    settings.defaultModelSelection,
+  );
+  const selection = isProjectScope
+    ? initialSelection
+    : applyProviderDefaultModel(
+        initialSelection,
+        initialSelection ? settings.providerDefaultModels[initialSelection.instanceId] : undefined,
+      );
   const entries = sortProviderInstanceEntries(
     applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
   );
@@ -72,7 +82,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
     selection?.model,
   );
   const activeEntry = entries.find((entry) => entry.instanceId === selection?.instanceId);
-  const mixedModel = useScopedSettingsMixed(["defaultModelSelection"]);
+  const mixedModel = useScopedSettingsMixed(
+    isProjectScope ? ["defaultModelSelection"] : ["defaultModelSelection", "providerDefaultModels"],
+  );
   const mixedPermissions = useScopedSettingsMixed(["defaultRuntimeMode"]);
   const PermissionIcon = runtimeModeConfig[settings.defaultRuntimeMode].icon;
   const mixedWorkspace = useScopedSettingsMixed(["defaultThreadEnvMode"]);
@@ -82,7 +94,6 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const mixedAgentCredits = useScopedSettingsMixed(["removeAgentCreditsOnMerge"]);
   const mixedMergeMethod = useScopedSettingsMixed(["pullRequestMergeMethod"]);
   const modelSource = useScopedSettingSource(["defaultModelSelection"]);
-  const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const unavailable = connectedEnvironments.length === 0;
   // File-backed keys show their effective value; the target already carries
   // the checkout's t3.json, and a null file here only fills the built-in.
@@ -127,7 +138,12 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       toastManager.add({ type: "error", title: "Default model not saved", description: reason });
       return;
     }
-    updateSettings({ defaultModelSelection: value });
+    updateSettings({
+      defaultModelSelection: value,
+      ...(!isProjectScope && value
+        ? { providerDefaultModels: { [value.instanceId]: value.model } }
+        : {}),
+    });
   };
 
   const modelRow = (

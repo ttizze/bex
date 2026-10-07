@@ -596,6 +596,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     providerSettingsOnly: true,
   },
   {
+    id: "provider-default-model",
+    title: "Provider default model",
+    to: "/settings/providers",
+    scope: "environment",
+    searchTerms: [
+      "new threads automatic codex claude cursor grok opencode antigravity pi instances models",
+    ],
+    providerSettingsOnly: true,
+  },
+  {
     id: "cursor-keychain-usage",
     title: "Cursor account usage",
     to: "/settings/providers",

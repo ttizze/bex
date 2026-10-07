@@ -43,6 +43,7 @@ import { Button } from "../ui/button";
 import { MorphIcon } from "~/components/MorphIcon";
 import { DraftInput } from "../ui/draft-input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -499,6 +500,8 @@ interface ProviderInstanceCardProps {
   readonly hiddenModels: ReadonlyArray<string>;
   readonly favoriteModels: ReadonlyArray<string>;
   readonly modelOrder: ReadonlyArray<string>;
+  readonly defaultModel: string | null;
+  readonly onDefaultModelChange: (model: string | null) => void;
   readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
@@ -554,6 +557,8 @@ export function ProviderInstanceCard({
   hiddenModels,
   favoriteModels,
   modelOrder,
+  defaultModel,
+  onDefaultModelChange,
   onHiddenModelsChange,
   onFavoriteModelsChange,
   onModelOrderChange,
@@ -1134,10 +1139,43 @@ export function ProviderInstanceCard({
           aria-disabled={readOnly || undefined}
           className={readOnly ? "opacity-50 select-none" : undefined}
         >
+          <SettingsRow
+            id="provider-default-model"
+            title="Default model"
+            description="Used for new threads with this provider unless a project specifies a model."
+            control={
+              <Select
+                value={defaultModel ?? ""}
+                onValueChange={(model) => onDefaultModelChange(model || null)}
+              >
+                <SelectTrigger aria-label="Default model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectPopup>
+                  <SelectItem value="">Automatic</SelectItem>
+                  {defaultModel &&
+                  !modelsForDisplay.some((model) => model.slug === defaultModel) ? (
+                    <SelectItem value={defaultModel} disabled>
+                      {defaultModel} (unavailable)
+                    </SelectItem>
+                  ) : null}
+                  {modelsForDisplay.map((model) => (
+                    <SelectItem
+                      key={model.slug}
+                      value={model.slug}
+                      disabled={!model.isCustom && hiddenModels.includes(model.slug)}
+                    >
+                      {model.name}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            }
+          />
           <div className="px-3 py-3 sm:px-4">
             <p className="mb-3 text-xs text-muted-foreground">
-              Favorites, visibility, and ordering are saved on this device. Custom models are saved
-              on the selected environment.
+              Favorites, visibility, and ordering are saved on this device. The default model and
+              custom models are saved on the selected environment.
             </p>
             <ProviderModelsSection
               instanceId={instanceId}

@@ -2521,7 +2521,7 @@ describe("composerDraftStore sticky composer settings", () => {
     const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
 
     store.setStickyModelSelection(modelSelection(CLAUDE_AGENT_DRIVER, "claude-opus-4-6"));
-    store.applyStickyState(threadRef);
+    store.applyStickyState(threadRef, {});
 
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toMatchObject({
       modelSelectionByProvider: {
@@ -2529,6 +2529,19 @@ describe("composerDraftStore sticky composer settings", () => {
       },
       activeProvider: "claudeAgent",
     });
+  });
+
+  it("seeds provider defaults over remembered models without changing sticky state", () => {
+    const store = useComposerDraftStore.getState();
+    const draftId = DraftId.make("draft-provider-defaults");
+    const remembered = modelSelection(CODEX_DRIVER, "remembered", { reasoningEffort: "high" });
+    const preferred = modelSelection(CODEX_DRIVER, "preferred");
+    store.setStickyModelSelection(remembered);
+    store.applyStickyState(draftId, { [CODEX_INSTANCE]: preferred.model });
+    expect(draftByKey(draftId)?.modelSelectionByProvider[CODEX_INSTANCE]).toEqual(preferred);
+    expect(useComposerDraftStore.getState().stickyModelSelectionByProvider[CODEX_INSTANCE]).toEqual(
+      remembered,
+    );
   });
 
   it("replaces a non-explicit stale model and its options with sticky state", () => {
@@ -2542,7 +2555,7 @@ describe("composerDraftStore sticky composer settings", () => {
     store.setStickyModelSelection(
       modelSelection(CODEX_DRIVER, "sticky-model", { reasoningEffort: "xhigh" }),
     );
-    store.applyStickyState(draftId);
+    store.applyStickyState(draftId, {});
 
     expect(draftByKey(draftId)).toMatchObject({
       activeProvider: CODEX_INSTANCE,
@@ -2559,7 +2572,7 @@ describe("composerDraftStore sticky composer settings", () => {
     const draftId = DraftId.make("draft-stale-without-sticky");
 
     store.setModelSelection(draftId, modelSelection(CODEX_DRIVER, "stale-model"));
-    store.applyStickyState(draftId);
+    store.applyStickyState(draftId, {});
 
     expect(draftByKey(draftId)).toBeUndefined();
   });

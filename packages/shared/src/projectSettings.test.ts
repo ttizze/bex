@@ -20,6 +20,32 @@ const projectId = ProjectId.make("project-a");
 const otherProjectId = ProjectId.make("project-b");
 
 describe("resolveProjectSettings", () => {
+  it("applies provider defaults at environment scope while preserving project overrides and model options", () => {
+    const instanceId = ProviderInstanceId.make("codex");
+    const selection = createModelSelection(instanceId, "previous", [
+      { id: "reasoningEffort", value: "high" },
+    ]);
+    const settings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      defaultModelSelection: selection,
+      providerDefaultModels: { codex: "preferred" },
+      projectSettingsOverrides: { [projectId]: { defaultModelSelection: selection } },
+    };
+    expect(resolveProjectSettings(settings, null).settings.defaultModelSelection).toEqual({
+      instanceId,
+      model: "preferred",
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.defaultModelSelection).toBe(
+      selection,
+    );
+    expect(
+      resolveProjectSettings(
+        { ...settings, providerDefaultModels: { [instanceId]: "previous" } },
+        null,
+      ).settings.defaultModelSelection,
+    ).toBe(selection);
+  });
+
   it("inherits every scopable key when the project has no overrides", () => {
     const resolved = resolveProjectSettings(DEFAULT_SERVER_SETTINGS, projectId);
     expect(resolved.settings).toBe(DEFAULT_SERVER_SETTINGS);

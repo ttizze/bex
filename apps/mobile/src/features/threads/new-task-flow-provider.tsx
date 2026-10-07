@@ -574,13 +574,18 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     ],
   );
 
-  // An unsent draft keeps its explicit pick. Fresh drafts resolve the project
-  // default before the last manual app-wide selection and provider default.
+  // Explicit drafts and project overrides win. Otherwise the chosen provider's
+  // configured default takes priority over remembered models.
   const selectedModel = resolveNewTaskModelSelection({
     draftSelection: draftModelSelection,
     projectDefaultSelection: projectDefaultModelSelection,
     stickySelection: stickyModelSelection,
     modelOptions,
+    providerDefaultModel: stickyModelSelection
+      ? selectedEnvironmentServerConfig?.settings?.providerDefaultModels?.[
+          stickyModelSelection.instanceId
+        ]
+      : undefined,
   });
   const selectedModelKey = selectedModel
     ? `${selectedModel.instanceId}:${selectedModel.model}`

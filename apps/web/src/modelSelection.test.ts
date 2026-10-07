@@ -68,6 +68,26 @@ function settingsWithProviderInstances(): UnifiedSettings {
 }
 
 describe("instance-scoped model selection", () => {
+  it("uses separate provider defaults while preserving explicit picks", () => {
+    const providers = [
+      provider({ instanceId: "codex", models: ["first", "preferred"] }),
+      provider({ instanceId: "codex_work", models: ["first", "work-preferred"] }),
+    ];
+    const settings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerDefaultModels: { codex: "preferred", codex_work: "work-preferred" },
+    };
+    for (const [id, model] of Object.entries(settings.providerDefaultModels)) {
+      expect(
+        resolveAppModelSelectionForInstance(ProviderInstanceId.make(id), settings, providers, null),
+      ).toBe(model);
+    }
+    const instanceId = ProviderInstanceId.make("codex");
+    expect(resolveAppModelSelectionForInstance(instanceId, settings, providers, "first")).toBe(
+      "first",
+    );
+  });
+
   it("preserves server-provided legacy model metadata", () => {
     const baseProvider = provider({
       instanceId: "claudeAgent",

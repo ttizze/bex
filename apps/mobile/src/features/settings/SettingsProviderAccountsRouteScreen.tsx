@@ -9,6 +9,7 @@ import { Alert, Linking, Pressable, ScrollView, TextInput, View } from "react-na
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText as Text } from "../../components/AppText";
+import { ControlPill, ControlPillMenu } from "../../components/ControlPill";
 import { ScreenScrollView } from "../../components/ScreenScrollView";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -20,15 +21,17 @@ import {
 } from "./components/SettingsEnvironmentFilterHeader";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
+import { SettingsControlRow } from "./components/SettingsControlRow";
 import { useSettingsEnvironmentFilter, type SettingsTarget } from "./settings-environment-filter";
 
 export function SettingsProviderAccountsRouteScreen() {
-  const { selectedTargets } = useSettingsEnvironmentFilter();
+  const { selectedTargets, selectedProjectKey } = useSettingsEnvironmentFilter();
   const insets = useSafeAreaInsets();
+  const updateSettings = useAtomCommand(serverEnvironment.updateSettings);
   return (
     <>
       <SettingsEnvironmentFilterHeader />
-      <SettingsScreen title="Provider accounts" trailing={<AndroidSettingsEnvironmentFilter />}>
+      <SettingsScreen title="Providers" trailing={<AndroidSettingsEnvironmentFilter />}>
         <ScreenScrollView
           className="flex-1"
           contentInsetAdjustmentBehavior="automatic"
@@ -40,6 +43,70 @@ export function SettingsProviderAccountsRouteScreen() {
           ) : (
             selectedTargets.map((environment) => (
               <SettingsSection key={environment.environmentId} title={environment.label}>
+                {environment.serverConfig.providers
+                  .filter((provider) => provider.enabled && provider.models.length > 0)
+                  .map((provider) => {
+                    const defaultModel =
+                      environment.serverConfig.settings.providerDefaultModels[provider.instanceId];
+                    const label = provider.displayName ?? provider.driver;
+                    const readOnly = selectedProjectKey !== null;
+                    return (
+                      <SettingsControlRow
+                        key={`default:${provider.instanceId}`}
+                        icon="text.bubble"
+                        label={label}
+                        subtitle="Default model for new threads"
+                        disabled={readOnly}
+                      >
+                        <View pointerEvents={readOnly ? "none" : "auto"}>
+                          <ControlPillMenu
+                            title="Default model"
+                            actions={[
+                              {
+                                id: "automatic",
+                                title: "Automatic",
+                                state: !defaultModel ? "on" : "off",
+                              },
+                              ...provider.models.map((model) => ({
+                                id: `model:${model.slug}`,
+                                title: model.name,
+                                state:
+                                  defaultModel === model.slug ? ("on" as const) : ("off" as const),
+                              })),
+                            ]}
+                            onPressAction={({ nativeEvent }) => {
+                              if (readOnly) return;
+                              void updateSettings({
+                                environmentId: environment.environmentId,
+                                input: {
+                                  patch: {
+                                    providerDefaultModels: {
+                                      [provider.instanceId]:
+                                        nativeEvent.event === "automatic"
+                                          ? null
+                                          : nativeEvent.event.slice(6),
+                                    },
+                                  },
+                                },
+                              });
+                            }}
+                          >
+                            <ControlPill
+                              label={
+                                provider.models.find((model) => model.slug === defaultModel)
+                                  ?.name ??
+                                defaultModel ??
+                                "Automatic"
+                              }
+                              variant="pill"
+                              disabled={readOnly}
+                              accessibilityLabel={`${label} default model`}
+                            />
+                          </ControlPillMenu>
+                        </View>
+                      </SettingsControlRow>
+                    );
+                  })}
                 {environment.serverConfig.providers
                   .filter(
                     (provider) =>

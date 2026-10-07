@@ -216,6 +216,9 @@ export function applyProviderInstanceMutation(
     providerInstances[mutation.instanceId] = mutation.instance;
   } else {
     delete providerInstances[mutation.instanceId];
+    const { [mutation.instanceId]: _removedDefault, ...providerDefaultModels } =
+      settings.providerDefaultModels;
+    return { ...settings, providerInstances, providerDefaultModels };
   }
   return { ...settings, providerInstances };
 }

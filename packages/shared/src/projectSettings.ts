@@ -13,6 +13,7 @@ import {
   type WorktreeCleanupRules,
 } from "@t3tools/contracts";
 import { isModelSelectionProviderEnabled } from "./serverSettings.ts";
+import { applyProviderDefaultModel } from "./model.ts";
 
 /**
  * Where a project-scoped value came from. The order is the priority order:
@@ -146,6 +147,15 @@ function resolveProjectOverrides(
   projectId: ProjectId | null,
   project?: LegacyProjectSettingsFields | null,
 ): ResolvedProjectSettings {
+  const defaultModelSelection = applyProviderDefaultModel(
+    settings.defaultModelSelection,
+    settings.defaultModelSelection
+      ? settings.providerDefaultModels[settings.defaultModelSelection.instanceId]
+      : undefined,
+  );
+  if (defaultModelSelection !== settings.defaultModelSelection) {
+    settings = { ...settings, defaultModelSelection };
+  }
   const stored = projectId === null ? undefined : settings.projectSettingsOverrides[projectId];
   const overrides: ProjectSettingsOverrides =
     project == null || settings.projectSettingsFolded

@@ -97,6 +97,42 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect("persists provider default models and resets only the requested instance", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const service = yield* ServerSettingsModule.ServerSettingsService;
+      yield* service.updateSettings(
+        yield* decodeSettingsPatch({
+          providerDefaultModels: {
+            codex: "gpt-5.5",
+            codex_work: "custom-model",
+            claudeAgent: "sonnet",
+          },
+        }),
+      );
+      yield* service.updateSettings(
+        yield* decodeSettingsPatch({
+          providerDefaultModels: { codex: null, claudeAgent: "opus" },
+        }),
+      );
+      const persisted = yield* decodeServerSettingsJson(
+        yield* fs.readFileString(config.settingsPath),
+      );
+      assert.deepEqual(persisted.providerDefaultModels, {
+        [ProviderInstanceId.make("codex_work")]: "custom-model",
+        [ProviderInstanceId.make("claudeAgent")]: "opus",
+      });
+      yield* service.updateProviderInstance({
+        operation: "remove",
+        instanceId: ProviderInstanceId.make("codex_work"),
+      });
+      assert.deepEqual((yield* service.getSettings).providerDefaultModels, {
+        [ProviderInstanceId.make("claudeAgent")]: "opus",
+      });
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
   it.effect("migrates saved token delivery to paragraph buffering without resetting settings", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;

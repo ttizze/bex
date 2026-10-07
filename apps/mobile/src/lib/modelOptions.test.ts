@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ProviderInstanceId, type ModelSelection, type ServerConfig } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProviderInstanceId,
+  type ModelSelection,
+  type ServerConfig,
+} from "@t3tools/contracts";
 
 import {
   buildModelOptions,
@@ -13,6 +18,41 @@ import {
 } from "./modelOptions";
 
 describe("mobile model options", () => {
+  it("uses each provider's default before remembered models and preserves explicit choices", () => {
+    const config = {
+      settings: { ...DEFAULT_SERVER_SETTINGS, providerDefaultModels: { codex: "preferred" } },
+      providers: [
+        {
+          instanceId: "codex",
+          driver: "codex",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          models: ["first", "preferred"].map((slug) => ({
+            slug,
+            name: slug,
+            isDefault: slug === "first",
+            isCustom: false,
+            capabilities: null,
+          })),
+        },
+      ],
+    } as unknown as ServerConfig;
+    const selection = { instanceId: ProviderInstanceId.make("codex"), model: "first" };
+    const input = {
+      draftSelection: null,
+      projectDefaultSelection: null,
+      stickySelection: selection,
+      modelOptions: buildModelOptions(config, null),
+      providerDefaultModel: config.settings.providerDefaultModels[selection.instanceId],
+    };
+    expect(resolveNewTaskModelSelection(input)?.model).toBe("preferred");
+    expect(resolveNewTaskModelSelection({ ...input, draftSelection: selection })).toBe(selection);
+    expect(resolveNewTaskModelSelection({ ...input, projectDefaultSelection: selection })).toBe(
+      selection,
+    );
+  });
+
   it("groups models by provider and flags legacy entries", () => {
     const config = {
       providers: [

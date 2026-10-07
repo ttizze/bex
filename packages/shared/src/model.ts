@@ -14,6 +14,16 @@ import { copySorted } from "./Array.ts";
 
 const DEFAULT_PROVIDER_DRIVER_KIND = ProviderDriverKind.make("codex");
 
+/** Replace a remembered or environment model with its provider's configured default. */
+export function applyProviderDefaultModel(
+  selection: ModelSelection | null,
+  model: string | undefined,
+): ModelSelection | null {
+  return selection && model && model !== selection.model
+    ? { instanceId: selection.instanceId, model }
+    : selection;
+}
+
 /** Choose the command for a model change against the thread's current provider instance. */
 export function modelSelectionCommandType(
   currentInstanceId: ProviderInstanceId,
