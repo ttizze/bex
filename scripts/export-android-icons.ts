@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 
-// Renders the Android launcher and splash artwork from the Icon Composer SVG sources.
+// Renders the Android launcher and splash artwork from the Icon Composer sources.
 //
 // Icon Composer exports already contain a rounded-square silhouette, and Android masks
 // the central 72dp of a 108dp adaptive canvas, so exporting them as a foreground produces
-// a double-framed icon with the letters cropped by the mask. Instead, each variant gets a
-// full-bleed background layer (the artwork behind the wordmark) and a shared transparent
-// foreground that keeps the wordmark inside the safe zone.
+// a double-framed icon with the logo cropped by the mask. Instead, each variant gets a
+// full-bleed background layer (the artwork behind the logo) and a transparent foreground
+// that keeps the variant's logo layer inside the safe zone.
 //
 // The Android 12+ splash screen masks its icon to a circle covering the central two thirds
 // of a 288dp canvas, which is the same proportion the launcher crops. Composing the two
-// adaptive layers into one 288dp image therefore makes the splash frame the wordmark
-// exactly like the launcher icon does.
+// adaptive layers into one 288dp image therefore makes the splash frame the logo exactly
+// like the launcher icon does.
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -28,33 +28,28 @@ type IconVariant = "dev" | "nightly" | "prod";
 const ADAPTIVE_CANVAS = 432;
 // 288dp at xxxhdpi: the full Android 12+ splash canvas, so the icon needs no upscaling.
 const SPLASH_CANVAS = 1152;
-// Icon Composer's layer sources use a 128pt viewBox; the wordmark path spans this box.
-const TEXT = { x: 15.53, y: 37, width: 94.5, height: 57 };
-// Wordmark width as a fraction of the 108dp canvas. The visible area is 72dp (66dp
-// guaranteed), so 0.48 leaves the letters at ~72% of the mask with room for the
-// launcher's own zoom effects.
-const WORDMARK_FRACTION = 0.48;
+// Logo height as a fraction of the 108dp canvas. The visible area is 72dp (66dp
+// guaranteed), so 0.5 leaves the logo inside the mask with room for the launcher's own
+// zoom effects.
+const LOGO_FRACTION = 0.5;
+// Notification icons are a 24dp silhouette at xxxhdpi with a 2dp margin.
+const NOTIFICATION_CANVAS = 96;
+const NOTIFICATION_LOGO_FRACTION = 20 / 24;
 // Icon Composer positions layers on a 1024pt canvas, with translation relative to center.
 const COMPOSER_CANVAS_PT = 1024;
 const SVG_DENSITY = 300;
 const OUTPUT_DIRECTORY = "apps/mobile/assets";
 // Production has no background artwork, so its splash composes onto the adaptive color.
-const PRODUCTION_BACKGROUND_COLOR = "#000000";
+const PRODUCTION_BACKGROUND_COLOR = "#FFFFFF";
+// The production logo's ink and paper colors. The silhouette keeps ink (and the antenna)
+// and drops paper, so the face reads as a cutout in the monochrome and notification icons.
+const LOGO_INK = [27, 27, 31] as const;
+const LOGO_PAPER = [253, 253, 252] as const;
 
 export class AndroidIconRenderError extends Schema.TaggedError<AndroidIconRenderError>()(
   "AndroidIconRenderError",
   { layer: Schema.String, cause: Schema.Defect() },
 ) {}
-
-const wordmarkTransform = (size: number) => {
-  const scale = (size * WORDMARK_FRACTION) / TEXT.width;
-  const tx = (size - TEXT.width * scale) / 2 - TEXT.x * scale;
-  const ty = (size - TEXT.height * scale) / 2 - TEXT.y * scale;
-  return `translate(${tx.toFixed(3)} ${ty.toFixed(3)}) scale(${scale.toFixed(4)})`;
-};
-
-const canvasSvg = (size: number, inner: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="none">${inner}</svg>`;
 
 // The layer sources clip to a 10pt rounded rectangle for the iOS silhouette. Android
 // applies its own mask, so the layer must bleed to the canvas edge.
@@ -103,34 +98,69 @@ const readLayerSource = Effect.fn("androidIcons.readLayerSource")(function* (
   );
 });
 
+const logoLayerPath = (repositoryRoot: string, variant: IconVariant) =>
+  Effect.map(Path.Path, (path) =>
+    path.join(repositoryRoot, "assets", variant, "app-icon.icon", "Assets", "logo.png"),
+  );
+
 const renderForeground = Effect.fn("androidIcons.renderForeground")(function* (
   repositoryRoot: string,
+  variant: IconVariant,
   size: number,
+  fraction = LOGO_FRACTION,
 ) {
-  const text = yield* readLayerSource(repositoryRoot, "prod", "text.svg");
-  const paths = text.match(/<path[^>]*\/>/g) ?? [];
-  return yield* rasterize(
-    "foreground",
-    canvasSvg(size, `<g transform="${wordmarkTransform(size)}">${paths.join("")}</g>`),
-    size,
-  );
+  const logo = yield* logoLayerPath(repositoryRoot, variant);
+  const box = Math.round(size * fraction);
+  const transparent = { r: 0, g: 0, b: 0, alpha: 0 };
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const trimmed = await sharp(logo).trim().png().toBuffer();
+      const fitted = await sharp(trimmed)
+        .resize(box, box, { fit: "contain", background: transparent })
+        .png()
+        .toBuffer();
+      return sharp({ create: { width: size, height: size, channels: 4, background: transparent } })
+        .composite([{ input: fitted, gravity: "center" }])
+        .png()
+        .toBuffer();
+    },
+    catch: (cause) => new AndroidIconRenderError({ layer: `${variant}-foreground`, cause }),
+  });
+});
+
+// A white silhouette whose alpha is the logo's coverage minus its paper, so Android can tint it.
+const renderSilhouette = Effect.fn("androidIcons.renderSilhouette")(function* (
+  repositoryRoot: string,
+  size: number,
+  fraction: number,
+) {
+  const foreground = yield* renderForeground(repositoryRoot, "prod", size, fraction);
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const { data, info } = await sharp(foreground).raw().toBuffer({ resolveWithObject: true });
+      for (let offset = 0; offset < data.length; offset += 4) {
+        const luminance = (data[offset]! + data[offset + 1]! + data[offset + 2]!) / 3;
+        const ink = (LOGO_PAPER[0] - luminance) / (LOGO_PAPER[0] - LOGO_INK[0]);
+        // The antenna's teal sits between ink and paper in luminance; treat it as ink.
+        const chroma =
+          Math.max(data[offset]!, data[offset + 1]!, data[offset + 2]!) -
+          Math.min(data[offset]!, data[offset + 1]!, data[offset + 2]!);
+        const coverage = Math.min(1, Math.max(0, ink + chroma / 128));
+        data[offset] = 255;
+        data[offset + 1] = 255;
+        data[offset + 2] = 255;
+        data[offset + 3] = Math.round(data[offset + 3]! * coverage);
+      }
+      return sharp(data, { raw: info }).png().toBuffer();
+    },
+    catch: (cause) => new AndroidIconRenderError({ layer: "silhouette", cause }),
+  });
 });
 
 const renderDevelopmentBackground = Effect.fn("androidIcons.renderDevelopmentBackground")(
   function* (repositoryRoot: string, size: number) {
-    // The annotation layer shares the wordmark's coordinate space, so it is scaled and
-    // centered the same way to keep the dimension lines around the letters.
-    const annotations = yield* readLayerSource(repositoryRoot, "dev", "annotations.svg");
-    const defs = annotations.match(/<defs>[\s\S]*?<\/defs>/)?.[0] ?? "";
-    const body = annotations.replace(/^[\s\S]*?<\/defs>/, "").replace(/<\/svg>\s*$/, "");
     const paper = yield* readLayerSource(repositoryRoot, "dev", "background.svg");
-    const background = yield* rasterize("dev-background", fullBleed(paper), size);
-    const overlay = yield* rasterize(
-      "dev-annotations",
-      canvasSvg(size, `${defs}<g transform="${wordmarkTransform(size)}">${body}</g>`),
-      size,
-    );
-    return yield* composite("dev-background", background, [{ input: overlay }]);
+    return yield* rasterize("dev-background", fullBleed(paper), size);
   },
 );
 
@@ -202,7 +232,7 @@ const renderSplashIcon = Effect.fn("androidIcons.renderSplashIcon")(function* (
   variant: IconVariant,
 ) {
   const background = yield* renderBackground(repositoryRoot, variant, SPLASH_CANVAS);
-  const foreground = yield* renderForeground(repositoryRoot, SPLASH_CANVAS);
+  const foreground = yield* renderForeground(repositoryRoot, variant, SPLASH_CANVAS);
   return yield* composite(`${variant}-splash`, background, [{ input: foreground }]);
 });
 
@@ -211,7 +241,14 @@ const exportAndroidIcons = Effect.gen(function* () {
   const path = yield* Path.Path;
   const repositoryRoot = path.resolve(import.meta.dirname, "..");
   const outputs = [
-    ["android-icon-foreground.png", yield* renderForeground(repositoryRoot, ADAPTIVE_CANVAS)],
+    [
+      "android-icon-foreground.png",
+      yield* renderForeground(repositoryRoot, "prod", ADAPTIVE_CANVAS),
+    ],
+    [
+      "android-icon-foreground-light.png",
+      yield* renderForeground(repositoryRoot, "dev", ADAPTIVE_CANVAS),
+    ],
     [
       "android-icon-background-dev.png",
       yield* renderDevelopmentBackground(repositoryRoot, ADAPTIVE_CANVAS),
@@ -223,6 +260,14 @@ const exportAndroidIcons = Effect.gen(function* () {
     ["android-splash-icon-dev.png", yield* renderSplashIcon(repositoryRoot, "dev")],
     ["android-splash-icon-nightly.png", yield* renderSplashIcon(repositoryRoot, "nightly")],
     ["android-splash-icon-prod.png", yield* renderSplashIcon(repositoryRoot, "prod")],
+    [
+      "android-icon-mark.png",
+      yield* renderSilhouette(repositoryRoot, ADAPTIVE_CANVAS, LOGO_FRACTION),
+    ],
+    [
+      "android-notification-icon.png",
+      yield* renderSilhouette(repositoryRoot, NOTIFICATION_CANVAS, NOTIFICATION_LOGO_FRACTION),
+    ],
   ] as const;
   for (const [name, contents] of outputs) {
     yield* fs.writeFile(path.join(repositoryRoot, OUTPUT_DIRECTORY, name), contents);
